@@ -122,48 +122,88 @@ def _content_tokens(text: str) -> Set[str]:
 
 
 # ---------------------------------------------------------------------------
-# Signal extraction
+# Signal extraction & Negation parsing
 # ---------------------------------------------------------------------------
 
-def extract_categories(text: str) -> Set[str]:
-    """Return the set of item categories mentioned in free text.
+NEGATION_PREFIXES = {"not", "non", "no", "without", "isnt", "wasnt", "not a", "not an"}
 
-    Uses substring matching against the synonym table above. A report can
-    plausibly mention more than one item category (e.g. "backpack
-    containing a laptop charger"), so we return a set rather than a single
-    best guess -- that also naturally supports the library-backpack example
-    where "laptop charger" is a secondary detail, not the lost item itself.
-    """
+
+def extract_negations(text: str) -> Set[str]:
+    """Extract phrases preceded by negation words like 'not', 'no', 'without', 'non-'."""
+    lowered = text.lower()
+    negated = set()
+    # Handle hyphenated negations like non-black
+    for m in re.findall(r"\bnon-([a-z0-9]+)\b", lowered):
+        negated.add(m.strip())
+    # Handle phrase negations like "not black", "no airpods", "without a charger", "isn't blue"
+    matches = re.findall(
+        r"\b(?:not|no|without|isn't|wasn't|isnt|wasnt)\s+(?:a\s+|an\s+|the\s+)?([a-z0-9\-]+(?:\s+[a-z0-9\-]+)?)\b",
+        lowered,
+    )
+    for m in matches:
+        negated.add(m.strip())
+    return negated
+
+
+def extract_categories(text: str) -> Tuple[Set[str], Set[str]]:
+    """Return (positive_categories, negated_categories) mentioned in free text."""
     lowered = f" {text.lower()} "
     found: Set[str] = set()
+    negated_found: Set[str] = set()
+    neg_terms = extract_negations(text)
+
     for canonical, synonyms in ITEM_SYNONYMS.items():
         for phrase in synonyms:
-            if f" {phrase} " in lowered or lowered.startswith(f"{phrase} ") or lowered.endswith(f" {phrase} "):
-                found.add(canonical)
+            phrase_re = rf"\b{re.escape(phrase)}\b"
+            if re.search(phrase_re, text.lower()):
+                # Check if this phrase is negated in text
+                is_neg = any(
+                    f"not {phrase}" in lowered or f"no {phrase}" in lowered or f"without {phrase}" in lowered
+                    or phrase in neg_terms
+                    for _ in [1]
+                )
+                if is_neg:
+                    negated_found.add(canonical)
+                else:
+                    found.add(canonical)
                 break
-            # also allow the phrase to appear without surrounding spaces
-            # guaranteed (e.g. at punctuation boundaries)
-            if re.search(rf"\b{re.escape(phrase)}\b", text.lower()):
-                found.add(canonical)
-                break
-    return found
+
+    # Positive categories shouldn't contain negated ones
+    found = found - negated_found
+    return found, negated_found
 
 
-def extract_colors(text: str) -> Set[str]:
+def extract_colors(text: str) -> Tuple[Set[str], Set[str]]:
+    """Return (positive_colors, negated_colors) mentioned in free text."""
     tokens = set(_tokenize(text))
+    neg_terms = extract_negations(text)
     colors = set()
+    negated_colors = set()
+
     for tok in tokens:
         norm = COLOR_NORMALIZE.get(tok, tok)
         if norm in COLOR_WORDS:
-            colors.add(norm)
+            if tok in neg_terms or f"not {tok}" in text.lower() or f"non-{tok}" in text.lower():
+                negated_colors.add(norm)
+            else:
+                colors.add(norm)
+
     lowered = text.lower()
     for phrase in VAGUE_DARK:
         if phrase in lowered:
-            colors.add("dark")
+            if "not dark" in lowered:
+                negated_colors.add("dark")
+            else:
+                colors.add("dark")
     for phrase in VAGUE_LIGHT:
         if phrase in lowered:
-            colors.add("light")
-    return colors
+            if "not light" in lowered:
+                negated_colors.add("light")
+            else:
+                colors.add("light")
+
+    colors = colors - negated_colors
+    return colors, negated_colors
 
 
 def extract_locations(text: str) -> Set[str]:
@@ -175,7 +215,10 @@ def extract_locations(text: str) -> Set[str]:
 # Per-signal scoring (each returns a float in [0, 1])
 # ---------------------------------------------------------------------------
 
-def score_category(cats_a: Set[str], cats_b: Set[str]) -> float:
+def score_category(cats_a: Set[str], cats_b: Set[str], neg_a: Set[str] = set(), neg_b: Set[str] = set()) -> float:
+    # Explicit negation conflict (e.g. A says "not a backpack", B says "backpack")
+    if (cats_a & neg_b) or (cats_b & neg_a):
+        return 0.0
     if cats_a & cats_b:
         return 1.0
     if not cats_a or not cats_b:
@@ -183,7 +226,10 @@ def score_category(cats_a: Set[str], cats_b: Set[str]) -> float:
     return 0.0  # both identified, and they disagree -> real negative signal
 
 
-def score_color(colors_a: Set[str], colors_b: Set[str]) -> float:
+def score_color(colors_a: Set[str], colors_b: Set[str], neg_a: Set[str] = set(), neg_b: Set[str] = set()) -> float:
+    # Explicit negation conflict (e.g. A says "not black", B says "black")
+    if (colors_a & neg_b) or (colors_b & neg_a):
+        return 0.0
     specific_a = colors_a - {"dark", "light"}
     specific_b = colors_b - {"dark", "light"}
     if specific_a & specific_b:
@@ -203,44 +249,65 @@ def score_color(colors_a: Set[str], colors_b: Set[str]) -> float:
     return 0.0  # colors mentioned on both sides and they conflict
 
 
-def score_location(loc_a: Optional[str], loc_b: Optional[str]) -> float:
-    if not loc_a or not loc_b:
+def score_location(loc_a: Optional[str], loc_b: Optional[str], desc_a: str = "", desc_b: str = "") -> float:
+    # Fallback to location extracted from description text if structured location field is blank
+    effective_a = loc_a
+    if not effective_a and desc_a:
+        extracted = extract_locations(desc_a)
+        if extracted:
+            effective_a = next(iter(sorted(extracted, key=len, reverse=True)))
+
+    effective_b = loc_b
+    if not effective_b and desc_b:
+        extracted = extract_locations(desc_b)
+        if extracted:
+            effective_b = next(iter(sorted(extracted, key=len, reverse=True)))
+
+    if not effective_a or not effective_b:
         return 0.5
-    known_a, known_b = extract_locations(loc_a), extract_locations(loc_b)
+
+    known_a, known_b = extract_locations(effective_a), extract_locations(effective_b)
     if known_a & known_b:
         return 1.0
-    a, b = loc_a.lower().strip(), loc_b.lower().strip()
+
+    a, b = effective_a.lower().strip(), effective_b.lower().strip()
     if a == b:
         return 1.0
     if a in b or b in a:
         return 0.8
     ratio = SequenceMatcher(None, a, b).ratio()
-    # Scale down fuzzy string similarity -- coincidental character overlap
-    # shouldn't score as high as a genuine keyword/substring match.
     return max(0.0, min(ratio, 0.7))
 
 
-def score_time(date_a, date_b) -> float:
-    if not date_a or not date_b:
-        return 0.5
-    # A "found" report logically can't predate the corresponding "lost"
-    # report by much; treat that as a strong negative signal rather than
-    # just "far apart in time".
-    delta_days = (date_b - date_a).days
-    if delta_days < -1:
-        return 0.05
-    diff = abs(delta_days)
-    if diff <= 0:
-        return 1.0
-    if diff <= 1:
+def score_time(date_a, date_b, desc_a: str = "", desc_b: str = "") -> float:
+    if date_a and date_b:
+        delta_days = (date_b - date_a).days
+        if delta_days < -1:
+            return 0.05
+        diff = abs(delta_days)
+        if diff <= 0:
+            return 1.0
+        if diff <= 1:
+            return 0.9
+        if diff <= 3:
+            return 0.7
+        if diff <= 7:
+            return 0.5
+        if diff <= 14:
+            return 0.3
+        return 0.1
+
+    # Text-based relative time signals when explicit date is missing
+    low_a, low_b = desc_a.lower(), desc_b.lower()
+    days = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
+    shared_days = {d for d in days if d in low_a} & {d for d in days if d in low_b}
+    if shared_days:
         return 0.9
-    if diff <= 3:
-        return 0.7
-    if diff <= 7:
-        return 0.5
-    if diff <= 14:
-        return 0.3
-    return 0.1
+
+    if ("two weeks later" in low_a and "two weeks later" in low_b) or ("yesterday" in low_a and "yesterday" in low_b):
+        return 0.8
+
+    return 0.5
 
 
 def score_text(text_a: str, text_b: str) -> float:
@@ -289,35 +356,49 @@ def compare(lost: Report, found: Report) -> MatchResult:
     if lost.type != ReportType.LOST or found.type != ReportType.FOUND:
         raise ValueError("compare() expects a LOST report and a FOUND report.")
 
-    cats_a, cats_b = extract_categories(lost.description), extract_categories(found.description)
-    colors_a, colors_b = extract_colors(lost.description), extract_colors(found.description)
+    cats_a, neg_cats_a = extract_categories(lost.description)
+    cats_b, neg_cats_b = extract_categories(found.description)
+    colors_a, neg_colors_a = extract_colors(lost.description)
+    colors_b, neg_colors_b = extract_colors(found.description)
 
     breakdown = {
-        "category": score_category(cats_a, cats_b),
-        "color": score_color(colors_a, colors_b),
-        "location": score_location(lost.location, found.location),
-        "time": score_time(lost.date, found.date),
+        "category": score_category(cats_a, cats_b, neg_cats_a, neg_cats_b),
+        "color": score_color(colors_a, colors_b, neg_colors_a, neg_colors_b),
+        "location": score_location(lost.location, found.location, lost.description, found.description),
+        "time": score_time(lost.date, found.date, lost.description, found.description),
         "text": score_text(lost.description, found.description),
     }
     total = sum(breakdown[k] * WEIGHTS[k] for k in WEIGHTS)
 
     notes = []
-    shared_cats = cats_a & cats_b
-    if shared_cats:
-        notes.append(f"same item type ({', '.join(sorted(shared_cats))})")
-    elif cats_a and cats_b:
-        notes.append(f"different item types ({', '.join(sorted(cats_a))} vs {', '.join(sorted(cats_b))})")
+    # Category notes
+    if (cats_a & neg_cats_b) or (cats_b & neg_cats_a):
+        notes.append("item type negated in report")
+    else:
+        shared_cats = cats_a & cats_b
+        if shared_cats:
+            notes.append(f"same item type ({', '.join(sorted(shared_cats))})")
+        elif cats_a and cats_b:
+            notes.append(f"different item types ({', '.join(sorted(cats_a))} vs {', '.join(sorted(cats_b))})")
 
-    if breakdown["color"] >= 0.6:
+    # Color notes
+    if (colors_a & neg_colors_b) or (colors_b & neg_colors_a):
+        notes.append("color conflict (negated color)")
+    elif breakdown["color"] >= 0.6:
         notes.append("colors agree")
     elif colors_a and colors_b and breakdown["color"] == 0.0:
         notes.append("colors conflict")
 
+    # Location notes
     if breakdown["location"] >= 0.8:
-        notes.append("same/nearby location")
-    elif lost.location and found.location and breakdown["location"] < 0.4:
+        if not lost.location or not found.location:
+            notes.append("same/nearby location (inferred from description)")
+        else:
+            notes.append("same/nearby location")
+    elif (lost.location or extract_locations(lost.description)) and (found.location or extract_locations(found.description)) and breakdown["location"] < 0.4:
         notes.append("locations don't seem related")
 
+    # Time notes
     if breakdown["time"] <= 0.1 and lost.date and found.date:
         notes.append("found date is before the lost date (suspicious)")
     elif breakdown["time"] >= 0.7:
@@ -343,3 +424,4 @@ def find_matches(target: Report, candidates: Iterable[Report],
             results.append(result)
     results.sort(key=lambda r: r.score, reverse=True)
     return results
+

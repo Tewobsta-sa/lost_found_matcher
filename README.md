@@ -109,6 +109,25 @@ found-before-lost dates) pulls the score down.
 - **Storage is in-memory**, with optional JSON save/load for convenience.
   A real deployment would use a database; that's out of scope here.
 
+## Handling Realistic & Messy Input
+
+To handle real-world messy reports:
+- **Negation parsing**: Identifies expressions like `"not black"`, `"non-dark"`, `"no charger"`, or `"without a case"` so that negated attributes trigger explicit conflicts instead of false positive matches.
+- **Free-text location & time extraction**: If structured fields (`location` or `date`) are left blank by a user, the engine automatically extracts location keywords (e.g., `"library"`, `"cafeteria"`) and time indicators (e.g., `"Monday afternoon"`) directly from free text.
+- **Synonyms & Brand mapping**: Recognizes model/brand variants (`AirPods` ↔ `earbuds`, `MacBook` ↔ `laptop`, `coffee shop` ↔ `cafeteria`).
+- **Multi-item support**: Category signals extract sets of items (`"backpack containing a charger"` -> `[bag, charger/cable]`) so secondary items are recognized without over-matching.
+
+## AI Usage Transparency
+
+In accordance with evaluation guidelines, here is a transparent breakdown of how AI tools were utilized in building this project:
+
+- **Claude (Initial Generation)**: Used to assist with initial code generation, scaffolding the core Python project structure (`models.py`, basic matching engine, store), and drafting the initial corkboard web interface (`lost_found_board.html`).
+- **DeepSeek (Code Review & Recommendations)**: Used to review the initial implementation, analyze potential failure modes, and provide architectural recommendations for handling messy inputs, signal weightings, and edge cases.
+- **Gemini (UI Redesign & Styling)**: Used to edit and transform the Web UI (`lost_found_board.html`) into a modern dark glassmorphism cyber board with live search filtering, confidence threshold controls, and glowing string connection visuals.
+- **Manual Review, Integration & Bug Fixing**: I carefully evaluated all AI-generated suggestions, accepted the recommendations that improved matching reliability (such as neutral missing-data handling and negation parsing), fixed identified bugs, and validated the system against unit tests.
+
+
+
 ## What I'd improve with more time
 
 - **Semantic similarity instead of keyword matching.** The category/color
@@ -126,8 +145,6 @@ found-before-lost dates) pulls the score down.
 - **Location taxonomy from real campus data** instead of a hardcoded
   keyword list, ideally with geographic coordinates so "50 meters apart"
   can be scored more precisely than "shared a keyword."
-- **Basic web UI** (a form + results list) instead of a CLI, since that's
-  closer to how students would actually interact with this.
 - **Duplicate/spam detection** — right now nothing stops the same report
   from being submitted twice, or obviously fake reports (e.g. one-word
   descriptions) from being accepted, beyond the "must be non-empty" check.
@@ -137,11 +154,13 @@ found-before-lost dates) pulls the score down.
 ```
 lost_found_matcher/
 ├── demo.py                  # non-interactive walkthrough
+├── lost_found_board.html    # interactive corkboard web interface
 ├── lost_found/
 │   ├── models.py            # Report data model
-│   ├── matcher.py           # scoring engine (the interesting part)
+│   ├── matcher.py           # scoring engine (negation, multi-signal, free-text extraction)
 │   ├── store.py             # in-memory storage + JSON persistence
 │   └── cli.py                # interactive command-line interface
 └── tests/
-    └── test_matcher.py      # unit tests, including the prompt's examples
+    └── test_matcher.py      # unit tests, prompt examples & messy input test suite
 ```
+

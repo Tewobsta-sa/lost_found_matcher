@@ -84,6 +84,27 @@ class TestFindMatches(unittest.TestCase):
         self.assertGreaterEqual(results[0].score, results[1].score)
 
 
+class TestMessyInput(unittest.TestCase):
+    def test_negated_color_prevents_match(self):
+        l = lost("Lost a backpack, not black.")
+        f = found("Found a black backpack.")
+        result = compare(l, f)
+        self.assertEqual(result.breakdown["color"], 0.0)
+        self.assertTrue(any("color conflict" in note for note in result.notes))
+
+    def test_location_inferred_from_free_text(self):
+        l = lost("Lost my laptop around the library on campus.")
+        f = found("Found a macbook near the library entrance.")
+        result = compare(l, f)
+        self.assertGreaterEqual(result.breakdown["location"], 0.8)
+
+    def test_time_inferred_from_free_text(self):
+        l = lost("Lost my wallet on Monday afternoon.")
+        f = found("Found a brown wallet on Monday evening.")
+        result = compare(l, f)
+        self.assertGreaterEqual(result.breakdown["time"], 0.8)
+
+
 class TestValidation(unittest.TestCase):
     def test_empty_description_raises(self):
         with self.assertRaises(ValueError):
@@ -92,3 +113,4 @@ class TestValidation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
