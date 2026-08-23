@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lost &amp; Found Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500&family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cork-1:#c79b6c;
+    --cork-2:#b3814f;
+    --cork-edge:#8a6238;
+    --ink:#2a2016;
+    --ink-soft:#5a4c3c;
+    --lost-card:#f1e2bd;
+    --lost-card-edge:#d9c290;
+    --found-card:#e2eef4;
+    --found-card-edge:#bcd6e2;
+    --pin-lost:#a23b2e;
+    --pin-found:#2f6e8e;
+    --string-strong:#8f2c1f;
+    --string-possible:#b9852a;
+    --string-unlikely:#8a8478;
+    --paper:#faf6ec;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Archivo',sans-serif;
+    color:var(--ink);
+    background:#e9e2d3;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+
+  header.top{
+    display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;
+    gap:16px;margin-bottom:22px;border-bottom:3px double var(--ink-soft);padding-bottom:16px;
+  }
+  header.top h1{
+    font-family:'Special Elite',monospace;font-weight:400;
+    font-size:34px;margin:0 0 4px;letter-spacing:0.5px;
+  }
+  header.top p{margin:0;color:var(--ink-soft);font-size:14px;max-width:520px;line-height:1.5;}
+  .top-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  .stamp-btn{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;
+    background:var(--paper);border:1.5px solid var(--ink);color:var(--ink);
+    padding:9px 14px;border-radius:3px;cursor:pointer;transform:rotate(-1deg);
+    box-shadow:2px 2px 0 rgba(0,0,0,0.15);transition:transform .12s ease;
+  }
+  .stamp-btn:hover{transform:rotate(0deg) translateY(-1px);}
+  .stamp-btn:active{transform:rotate(0deg) translateY(1px);box-shadow:1px 1px 0 rgba(0,0,0,0.15);}
+  .stamp-btn.danger{border-color:var(--string-strong);color:var(--string-strong);}
+
+  .board{
+    position:relative;
+    background:
+      radial-gradient(circle at 12% 18%, rgba(0,0,0,0.10) 0, transparent 3px),
+      radial-gradient(circle at 78% 32%, rgba(0,0,0,0.08) 0, transparent 3px),
+      radial-gradient(circle at 40% 68%, rgba(0,0,0,0.09) 0, transparent 3px),
+      radial-gradient(circle at 88% 82%, rgba(0,0,0,0.07) 0, transparent 3px),
+      radial-gradient(circle at 25% 90%, rgba(0,0,0,0.08) 0, transparent 3px),
+      radial-gradient(circle at 60% 8%, rgba(0,0,0,0.08) 0, transparent 3px),
+      linear-gradient(135deg, var(--cork-1), var(--cork-2));
+    border:10px solid #6b4a2b;
+    border-radius:6px;
+    padding:24px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:28px;
+    box-shadow:inset 0 0 40px rgba(0,0,0,0.25), 0 6px 18px rgba(0,0,0,0.2);
+  }
+  @media (max-width:760px){ .board{grid-template-columns:1fr;} }
+
+  svg.strings{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5;overflow:visible;}
+
+  .column{position:relative;z-index:2;}
+  .column-head{
+    display:flex;align-items:center;gap:8px;margin-bottom:14px;
+  }
+  .tab{
+    font-family:'Special Elite',monospace;font-size:18px;color:#fff8ec;
+    padding:5px 14px 6px;border-radius:3px 3px 0 0;
+    box-shadow:1px 2px 4px rgba(0,0,0,0.25);
+  }
+  .tab.lost{background:var(--pin-lost);}
+  .tab.found{background:var(--pin-found);}
+  .column-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#fff2de;opacity:0.85;}
+
+  .new-report-btn{
+    width:100%;text-align:left;padding:12px 14px;margin-bottom:16px;
+    border:2px dashed rgba(42,32,22,0.45);border-radius:4px;background:rgba(255,255,255,0.18);
+    color:var(--ink);font-family:'IBM Plex Mono',monospace;font-size:12.5px;letter-spacing:0.3px;
+    cursor:pointer;transition:background .12s ease;
+  }
+  .new-report-btn:hover{background:rgba(255,255,255,0.32);}
+
+  .report-form{
+    background:var(--paper);border-radius:4px;padding:14px;margin-bottom:16px;
+    box-shadow:2px 3px 10px rgba(0,0,0,0.25);display:none;
+  }
+  .report-form.open{display:block;}
+  .report-form label{display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;
+    color:var(--ink-soft);margin:10px 0 4px;text-transform:uppercase;letter-spacing:0.4px;}
+  .report-form label:first-of-type{margin-top:0;}
+  .report-form textarea, .report-form input{
+    width:100%;font-family:'Archivo',sans-serif;font-size:13.5px;color:var(--ink);
+    border:1px solid #cfc3a8;border-radius:3px;padding:8px 9px;background:#fff;
+  }
+  .report-form textarea{resize:vertical;min-height:56px;}
+  .report-form .field-error{color:var(--string-strong);font-size:12px;margin-top:4px;display:none;font-family:'IBM Plex Mono',monospace;}
+  .report-form .row-actions{display:flex;gap:8px;margin-top:14px;}
+  .form-submit{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;text-transform:uppercase;
+    background:var(--ink);color:#fff8ec;border:none;padding:8px 14px;border-radius:3px;cursor:pointer;
+  }
+  .form-cancel{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;text-transform:uppercase;
+    background:transparent;color:var(--ink-soft);border:1px solid #cfc3a8;padding:8px 14px;border-radius:3px;cursor:pointer;
+  }
+
+  .cards{display:flex;flex-direction:column;gap:22px;min-height:40px;}
+  .empty-col{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:#fff2de;opacity:0.75;
+    padding:10px 2px;
+  }
+
+  .card{
+    position:relative;
+    border-radius:2px;
+    padding:16px 14px 14px;
+    box-shadow:3px 5px 10px rgba(0,0,0,0.28);
+    cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease, opacity .15s ease;
+  }
+  .card.lost{background:var(--lost-card);border:1px solid var(--lost-card-edge);}
+  .card.found{background:var(--found-card);border:1px solid var(--found-card-edge);}
+  .card:hover{transform:translateY(-2px) rotate(0deg) !important;box-shadow:4px 7px 14px rgba(0,0,0,0.32);}
+  .card.selected{outline:2.5px solid var(--ink);outline-offset:2px;}
+  .card.dimmed{opacity:0.4;}
+  .card.matched-strong{outline:2.5px solid var(--string-strong);outline-offset:2px;}
+  .card.matched-possible{outline:2.5px dashed var(--string-possible);outline-offset:2px;}
+  .card.matched-unlikely{outline:1.5px dotted var(--string-unlikely);outline-offset:2px;}
+  .card.flash{animation:flashcard .9s ease;}
+  @keyframes flashcard{0%{box-shadow:0 0 0 6px rgba(42,32,22,0.25);}100%{box-shadow:3px 5px 10px rgba(0,0,0,0.28);}}
+
+  .pin{
+    position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+    width:16px;height:16px;border-radius:50%;
+    box-shadow:0 2px 3px rgba(0,0,0,0.4), inset -2px -2px 3px rgba(0,0,0,0.25), inset 2px 2px 3px rgba(255,255,255,0.35);
+  }
+  .card.lost .pin{background:radial-gradient(circle at 35% 30%, #d76b57, var(--pin-lost));}
+  .card.found .pin{background:radial-gradient(circle at 35% 30%, #5c9dbb, var(--pin-found));}
+
+  .card-id{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);margin-bottom:6px;}
+  .card-desc{font-size:14px;line-height:1.42;margin:0 0 10px;}
+  .card-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  .meta-chip{
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);
+    background:rgba(255,255,255,0.55);border:1px solid rgba(42,32,22,0.15);
+    border-radius:10px;padding:2px 8px;
+  }
+  .card-best{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);
+    border-top:1px dashed rgba(42,32,22,0.25);padding-top:7px;margin-top:2px;}
+  .card-best b{color:var(--ink);}
+  .remove-btn{
+    position:absolute;top:6px;right:8px;background:none;border:none;color:var(--ink-soft);
+    font-size:15px;line-height:1;cursor:pointer;padding:2px 4px;opacity:0;transition:opacity .12s ease;
+  }
+  .card:hover .remove-btn{opacity:0.6;}
+  .remove-btn:hover{opacity:1 !important;color:var(--string-strong);}
+
+  .string-badge{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;
+    padding:2px 6px;border-radius:9px;white-space:nowrap;text-align:center;
+    box-shadow:1px 1px 3px rgba(0,0,0,0.3);border:1px solid rgba(0,0,0,0.15);
+  }
+  .string-badge.strong{background:var(--string-strong);color:#fdeee9;}
+  .string-badge.possible{background:var(--string-possible);color:#3a2a05;}
+  .string-badge.unlikely{background:#efe9dc;color:var(--ink-soft);}
+
+  .panel{
+    margin-top:26px;background:var(--paper);border-radius:6px;padding:18px 20px;
+    box-shadow:0 3px 12px rgba(0,0,0,0.15);
+  }
+  .panel h2{font-family:'Special Elite',monospace;font-weight:400;font-size:19px;margin:0 0 4px;}
+  .panel .panel-sub{color:var(--ink-soft);font-size:13px;margin:0 0 14px;}
+  .panel .empty-hint{color:var(--ink-soft);font-size:13.5px;font-style:italic;}
+
+  .match-row{
+    border:1px solid #e2d6b8;border-radius:4px;padding:11px 13px;margin-bottom:10px;
+    cursor:pointer;transition:background .12s ease;
+  }
+  .match-row:hover{background:#f4eeda;}
+  .match-row-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;}
+  .match-label{font-family:'IBM Plex Mono',monospace;font-size:11.5px;text-transform:uppercase;letter-spacing:0.3px;}
+  .match-label.strong{color:var(--string-strong);}
+  .match-label.possible{color:var(--string-possible);}
+  .match-label.unlikely{color:var(--ink-soft);}
+  .match-score{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;}
+  .match-desc{font-size:13.5px;margin:2px 0 6px;}
+  .match-bar-track{height:5px;border-radius:3px;background:#e5dcc4;overflow:hidden;margin-bottom:6px;}
+  .match-bar-fill{height:100%;border-radius:3px;}
+  .match-bar-fill.strong{background:var(--string-strong);}
+  .match-bar-fill.possible{background:var(--string-possible);}
+  .match-bar-fill.unlikely{background:var(--string-unlikely);}
+  .match-notes{display:flex;flex-wrap:wrap;gap:5px;}
+  .note-chip{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-soft);
+    background:#f0e9d6;border-radius:8px;padding:2px 7px;}
+
+  footer.note{font-size:12px;color:var(--ink-soft);text-align:center;margin-top:20px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Lost &amp; Found Board</h1>
+      <p>Pin a lost or found report, then click any card to see how strongly it's connected to reports on the other side — and why.</p>
+    </div>
+    <div class="top-actions">
+      <button class="stamp-btn" id="load-demo-btn">Load example reports</button>
+      <button class="stamp-btn danger" id="clear-btn">Clear board</button>
+    </div>
+  </header>
+
+  <div class="board" id="board">
+    <svg class="strings" id="strings"></svg>
+
+    <div class="column" id="lost-column">
+      <div class="column-head">
+        <span class="tab lost">Lost</span>
+        <span class="column-sub" id="lost-count">0 reports</span>
+      </div>
+      <button class="new-report-btn" data-type="lost">+ Pin a lost-item report</button>
+      <div class="report-form" data-type="lost">
+        <label>What did you lose?</label>
+        <textarea data-field="description" placeholder="e.g. Black backpack containing a laptop charger"></textarea>
+        <div class="field-error" data-field="description">Enter a description first.</div>
+        <label>Where (optional)</label>
+        <input type="text" data-field="location" placeholder="e.g. library" list="known-locations">
+        <label>Date (optional)</label>
+        <input type="date" data-field="date">
+        <label>Contact (optional)</label>
+        <input type="text" data-field="contact" placeholder="email or phone">
+        <div class="row-actions">
+          <button class="form-submit" data-type="lost">Pin report</button>
+          <button class="form-cancel" data-type="lost">Cancel</button>
+        </div>
+      </div>
+      <div class="cards" id="lost-cards"></div>
+    </div>
+
+    <div class="column" id="found-column">
+      <div class="column-head">
+        <span class="tab found">Found</span>
+        <span class="column-sub" id="found-count">0 reports</span>
+      </div>
+      <button class="new-report-btn" data-type="found">+ Pin a found-item report</button>
+      <div class="report-form" data-type="found">
+        <label>What did you find?</label>
+        <textarea data-field="description" placeholder="e.g. Dark-colored backpack found near the library entrance"></textarea>
+        <div class="field-error" data-field="description">Enter a description first.</div>
+        <label>Where (optional)</label>
+        <input type="text" data-field="location" placeholder="e.g. library entrance" list="known-locations">
+        <label>Date (optional)</label>
+        <input type="date" data-field="date">
+        <label>Contact (optional)</label>
+        <input type="text" data-field="contact" placeholder="email or phone">
+        <div class="row-actions">
+          <button class="form-submit" data-type="found">Pin report</button>
+          <button class="form-cancel" data-type="found">Cancel</button>
+        </div>
+      </div>
+      <div class="cards" id="found-cards"></div>
+    </div>
+
+  </div>
+
+  <datalist id="known-locations"></datalist>
+
+  <div class="panel" id="panel">
+    <h2>Case notes</h2>
+    <p class="panel-sub" id="panel-sub">Click a pinned report to see its potential matches.</p>
+    <div id="panel-body"><p class="empty-hint">Nothing selected yet.</p></div>
+  </div>
+
+  <footer class="note">
+    Matching runs entirely in your browser against category, color, location, timing, and text overlap — nothing is sent anywhere. Reports reset when you reload the page.
+  </footer>
+
+</div>
+
+<script>
+var WEIGHTS = { category: 0.35, color: 0.15, location: 0.25, time: 0.15, text: 0.10 };
+var STRONG_THRESHOLD = 0.70, POSSIBLE_THRESHOLD = 0.45, DISPLAY_THRESHOLD = 0.30;
+
+var ITEM_SYNONYMS = {
+  "bag": ["backpack", "bag", "rucksack", "knapsack", "tote", "duffel bag", "duffel"],
+  "earbuds/case": ["airpods case", "airpods", "earbud case", "earbuds case", "earbud", "earbuds",
+    "earphone case", "earphone", "earphones", "wireless earbud case", "headphones"],
+  "wallet": ["wallet", "billfold", "coin purse", "purse"],
+  "phone": ["cell phone", "smartphone", "iphone", "android phone", "phone"],
+  "laptop": ["laptop", "notebook computer", "macbook", "chromebook"],
+  "keys": ["keychain", "key fob", "car keys", "car key", "keys", "key"],
+  "umbrella": ["umbrella"],
+  "bottle": ["water bottle", "bottle", "flask", "thermos"],
+  "eyewear": ["glasses", "sunglasses", "spectacles", "eyeglasses"],
+  "outerwear": ["jacket", "coat", "hoodie", "sweater", "sweatshirt", "windbreaker"],
+  "id/card": ["id card", "student id", "id badge", "badge", "id"],
+  "charger/cable": ["charging cable", "charger", "power bank", "power cord", "cable", "cord"],
+  "notebook": ["notebook", "notepad", "planner", "journal"],
+  "watch": ["smartwatch", "wristwatch", "watch"]
+};
+var COLOR_WORDS = ["black","white","gray","grey","blue","red","green","yellow","brown","pink",
+  "purple","orange","silver","gold","navy","beige","tan","maroon","teal"];
+var COLOR_NORMALIZE = { grey: "gray" };
+var DARK_COLORS = ["black","gray","navy","brown","maroon","purple"];
+var LIGHT_COLORS = ["white","beige","tan","silver","yellow"];
+var KNOWN_LOCATIONS = ["cafeteria","coffee shop","library","library entrance","gym","dorm",
+  "dormitory","residence hall","football field","quad","student center","student union",
+  "parking lot","bus stop","lecture hall","auditorium","science building","engineering building",
+  "dining hall","bookstore","gymnasium","stadium","lab","classroom"];
+var STOPWORDS = ["a","an","the","i","my","me","near","by","beside","around","found","lost",
+  "yesterday","today","this","that","and","or","on","in","at","of","to","it","was","is","with",
+  "containing","contains","morning","afternoon","evening","night","last","week","weeks","day",
+  "days","ago","later","some","somewhere"];
+
+function toSet(arr){ var s = {}; arr.forEach(function(x){ s[x] = true; }); return s; }
+var STOPWORD_SET = toSet(STOPWORDS), COLOR_WORD_SET = toSet(COLOR_WORDS);
+var DARK_SET = toSet(DARK_COLORS), LIGHT_SET = toSet(LIGHT_COLORS);
+
+function tokenize(text){ return (text.toLowerCase().match(/[a-zA-Z']+/g) || []); }
+function contentTokens(text){
+  var out = {};
+  tokenize(text).forEach(function(w){ if(!STOPWORD_SET[w] && w.length > 2) out[w] = true; });
+  return out;
+}
+function keys(obj){ return Object.keys(obj); }
+function intersectSize(a, b){ var n = 0; keys(a).forEach(function(k){ if(b[k]) n++; }); return n; }
+function unionSize(a, b){ var u = {}; keys(a).forEach(function(k){u[k]=true;}); keys(b).forEach(function(k){u[k]=true;}); return keys(u).length; }
+function anyIn(arr, setObj){ return arr.some(function(x){ return !!setObj[x]; }); }
+
+function extractCategories(text){
+  var lowered = text.toLowerCase(), out = {};
+  Object.keys(ITEM_SYNONYMS).forEach(function(canonical){
+    var synonyms = ITEM_SYNONYMS[canonical];
+    for (var i = 0; i < synonyms.length; i++){
+      var phrase = synonyms[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      var re = new RegExp("\\b" + phrase + "\\b");
+      if (re.test(lowered)){ out[canonical] = true; break; }
+    }
+  });
+  return out;
+}
+function extractColors(text){
+  var out = {};
+  tokenize(text).forEach(function(tok){
+    var norm = COLOR_NORMALIZE[tok] || tok;
+    if (COLOR_WORD_SET[norm]) out[norm] = true;
+  });
+  var lowered = text.toLowerCase();
+  if (/\bdark\b/.test(lowered)) out.dark = true;
+  if (/\blight\b/.test(lowered)) out.light = true;
+  return out;
+}
+function extractLocations(text){
+  var lowered = text.toLowerCase(), out = {};
+  KNOWN_LOCATIONS.forEach(function(loc){ if (lowered.indexOf(loc) !== -1) out[loc] = true; });
+  return out;
+}
+
+function scoreCategory(a, b){
+  if (intersectSize(a, b) > 0) return 1.0;
+  if (keys(a).length === 0 || keys(b).length === 0) return 0.5;
+  return 0.0;
+}
+function scoreColor(a, b){
+  var specA = {}, specB = {};
+  keys(a).forEach(function(c){ if (c !== "dark" && c !== "light") specA[c] = true; });
+  keys(b).forEach(function(c){ if (c !== "dark" && c !== "light") specB[c] = true; });
+  if (intersectSize(specA, specB) > 0) return 1.0;
+  if ((a.dark && anyIn(keys(specB), DARK_SET)) || (b.dark && anyIn(keys(specA), DARK_SET))) return 0.6;
+  if ((a.light && anyIn(keys(specB), LIGHT_SET)) || (b.light && anyIn(keys(specA), LIGHT_SET))) return 0.6;
+  if (a.dark && b.dark) return 0.6;
+  if (a.light && b.light) return 0.6;
+  if (keys(a).length === 0 || keys(b).length === 0) return 0.5;
+  return 0.0;
+}
+function similarityRatio(a, b){
+  if (a === b) return 1.0;
+  var longer = a.length >= b.length ? a : b, shorter = a.length >= b.length ? b : a;
+  if (longer.length === 0) return 1.0;
+  var used = new Array(shorter.length).fill(false), matches = 0;
+  for (var i = 0; i < longer.length; i++){
+    for (var j = 0; j < shorter.length; j++){
+      if (!used[j] && longer[i] === shorter[j]){ used[j] = true; matches++; break; }
+    }
+  }
+  return (2.0 * matches) / (longer.length + shorter.length);
+}
+function scoreLocation(locA, locB){
+  if (!locA || !locB) return 0.5;
+  var knownA = extractLocations(locA), knownB = extractLocations(locB);
+  if (intersectSize(knownA, knownB) > 0) return 1.0;
+  var a = locA.toLowerCase().trim(), b = locB.toLowerCase().trim();
+  if (a === b) return 1.0;
+  if (a.indexOf(b) !== -1 || b.indexOf(a) !== -1) return 0.8;
+  return Math.max(0.0, Math.min(similarityRatio(a, b), 0.7));
+}
+function scoreTime(dateA, dateB){
+  if (!dateA || !dateB) return 0.5;
+  var deltaDays = Math.round((dateB - dateA) / 86400000);
+  if (deltaDays < -1) return 0.05;
+  var diff = Math.abs(deltaDays);
+  if (diff <= 0) return 1.0;
+  if (diff <= 1) return 0.9;
+  if (diff <= 3) return 0.7;
+  if (diff <= 7) return 0.5;
+  if (diff <= 14) return 0.3;
+  return 0.1;
+}
+function scoreText(a, b){
+  var ta = contentTokens(a), tb = contentTokens(b);
+  if (keys(ta).length === 0 || keys(tb).length === 0) return 0.5;
+  var u = unionSize(ta, tb);
+  if (u === 0) return 0.5;
+  return intersectSize(ta, tb) / u;
+}
+function labelFor(score){
+  if (score >= STRONG_THRESHOLD) return "strong";
+  if (score >= POSSIBLE_THRESHOLD) return "possible";
+  return "unlikely";
+}
+function labelText(label){
+  return label === "strong" ? "Strong match" : label === "possible" ? "Possible match" : "Unlikely match";
+}
+
+function compare(lost, found){
+  var catsA = extractCategories(lost.description), catsB = extractCategories(found.description);
+  var colorsA = extractColors(lost.description), colorsB = extractColors(found.description);
+  var breakdown = {
+    category: scoreCategory(catsA, catsB),
+    color: scoreColor(colorsA, colorsB),
+    location: scoreLocation(lost.location, found.location),
+    time: scoreTime(lost.date, found.date),
+    text: scoreText(lost.description, found.description)
+  };
+  var total = 0;
+  Object.keys(WEIGHTS).forEach(function(k){ total += breakdown[k] * WEIGHTS[k]; });
+
+  var notes = [];
+  var sharedCats = keys(catsA).filter(function(c){ return catsB[c]; });
+  if (sharedCats.length > 0) notes.push("same item type (" + sharedCats.join(", ") + ")");
+  else if (keys(catsA).length && keys(catsB).length) notes.push("different item types");
+
+  if (breakdown.color >= 0.6) notes.push("colors agree");
+  else if (keys(colorsA).length && keys(colorsB).length && breakdown.color === 0.0) notes.push("colors conflict");
+
+  if (breakdown.location >= 0.8) notes.push("same/nearby location");
+  else if (lost.location && found.location && breakdown.location < 0.4) notes.push("locations don't seem related");
+
+  if (breakdown.time <= 0.1 && lost.date && found.date) notes.push("found date is before lost date");
+  else if (breakdown.time >= 0.7) notes.push("timing lines up well");
+
+  var label = labelFor(total);
+  return { lost: lost, found: found, score: total, label: label, breakdown: breakdown, notes: notes };
+}
+function findMatches(target, candidates){
+  var results = [];
+  candidates.forEach(function(other){
+    if (other.type === target.type) return;
+    var lost = target.type === "lost" ? target : other;
+    var found = target.type === "lost" ? other : target;
+    var r = compare(lost, found);
+    if (r.score >= DISPLAY_THRESHOLD) results.push(r);
+  });
+  results.sort(function(a, b){ return b.score - a.score; });
+  return results;
+}
+
+var reports = [];
+var nextId = 1;
+var selectedId = null;
+
+function addReport(type, description, location, dateStr, contact){
+  var d = dateStr ? new Date(dateStr + "T00:00:00") : null;
+  var r = { id: nextId++, type: type, description: description.trim(),
+    location: (location || "").trim() || null, date: d, contact: (contact || "").trim() || null };
+  reports.push(r);
+  return r;
+}
+
+function byType(type){ return reports.filter(function(r){ return r.type === type; }); }
+function findById(id){ return reports.find(function(r){ return r.id === id; }); }
+
+function fmtDate(d){
+  if (!d) return null;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function cardEl(r){
+  var el = document.createElement("div");
+  el.className = "card " + r.type;
+  el.dataset.id = r.id;
+  var rotation = ((r.id * 37) % 7) - 3;
+  el.style.transform = "rotate(" + rotation + "deg)";
+  var metaBits = [];
+  if (r.location) metaBits.push('<span class="meta-chip">' + escapeHtml(r.location) + '</span>');
+  if (r.date) metaBits.push('<span class="meta-chip">' + fmtDate(r.date) + '</span>');
+  var best = bestMatchFor(r);
+  var bestHtml = "";
+  if (best) {
+    bestHtml = '<div class="card-best">Best match: <b>' + Math.round(best.score * 100) + '%</b> — ' + labelText(best.label) + '</div>';
+  } else {
+    bestHtml = '<div class="card-best">No matches yet</div>';
+  }
+  el.innerHTML =
+    '<button class="remove-btn" title="Remove report" data-remove="' + r.id + '">&times;</button>' +
+    '<div class="pin"></div>' +
+    '<div class="card-id">#' + r.id + (r.contact ? " &middot; " + escapeHtml(r.contact) : "") + '</div>' +
+    '<div class="card-desc">' + escapeHtml(r.description) + '</div>' +
+    '<div class="card-meta">' + metaBits.join("") + '</div>' +
+    bestHtml;
+  return el;
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+  });
+}
+function bestMatchFor(r){
+  var opposite = byType(r.type === "lost" ? "found" : "lost");
+  var matches = findMatches(r, opposite);
+  return matches.length ? matches[0] : null;
+}
+
+function renderColumn(type){
+  var container = document.getElementById(type + "-cards");
+  var list = byType(type);
+  document.getElementById(type + "-count").textContent = list.length + (list.length === 1 ? " report" : " reports");
+  container.innerHTML = "";
+  if (list.length === 0){
+    var empty = document.createElement("div");
+    empty.className = "empty-col";
+    empty.textContent = "No " + type + " reports pinned yet.";
+    container.appendChild(empty);
+    return;
+  }
+  list.slice().reverse().forEach(function(r){ container.appendChild(cardEl(r)); });
+}
+
+function renderAll(){
+  renderColumn("lost");
+  renderColumn("found");
+  wireCardEvents();
+  applySelectionStyling();
+  recomputeStrings();
+}
+
+function wireCardEvents(){
+  document.querySelectorAll(".card").forEach(function(el){
+    el.addEventListener("click", function(e){
+      if (e.target.closest(".remove-btn")) return;
+      var id = parseInt(el.dataset.id, 10);
+      selectedId = (selectedId === id) ? null : id;
+      applySelectionStyling();
+      recomputeStrings();
+      renderPanel();
+    });
+  });
+  document.querySelectorAll("[data-remove]").forEach(function(btn){
+    btn.addEventListener("click", function(e){
+      e.stopPropagation();
+      var id = parseInt(btn.dataset.remove, 10);
+      reports = reports.filter(function(r){ return r.id !== id; });
+      if (selectedId === id) selectedId = null;
+      renderAll();
+      renderPanel();
+    });
+  });
+}
+
+function applySelectionStyling(){
+  var cards = document.querySelectorAll(".card");
+  if (selectedId === null){
+    cards.forEach(function(el){
+      el.classList.remove("selected", "dimmed", "matched-strong", "matched-possible", "matched-unlikely");
+    });
+    return;
+  }
+  var selected = findById(selectedId);
+  var opposite = byType(selected.type === "lost" ? "found" : "lost");
+  var matches = findMatches(selected, opposite);
+  var matchMap = {};
+  matches.forEach(function(m){
+    var otherId = selected.type === "lost" ? m.found.id : m.lost.id;
+    matchMap[otherId] = m.label;
+  });
+  cards.forEach(function(el){
+    var id = parseInt(el.dataset.id, 10);
+    el.classList.remove("selected", "dimmed", "matched-strong", "matched-possible", "matched-unlikely");
+    if (id === selectedId){ el.classList.add("selected"); return; }
+    var r = findById(id);
+    if (r.type === selected.type){ el.classList.add("dimmed"); return; }
+    if (matchMap[id]){ el.classList.add("matched-" + matchMap[id]); }
+    else { el.classList.add("dimmed"); }
+  });
+}
+
+function recomputeStrings(){
+  var svg = document.getElementById("strings");
+  svg.innerHTML = "";
+  if (selectedId === null) return;
+  var boardRect = document.getElementById("board").getBoundingClientRect();
+  var selectedEl = document.querySelector('.card[data-id="' + selectedId + '"]');
+  if (!selectedEl) return;
+  var selected = findById(selectedId);
+  var opposite = byType(selected.type === "lost" ? "found" : "lost");
+  var matches = findMatches(selected, opposite);
+
+  var selPin = selectedEl.querySelector(".pin").getBoundingClientRect();
+  var startX = selPin.left + selPin.width / 2 - boardRect.left;
+  var startY = selPin.top + selPin.height / 2 - boardRect.top;
+  var fromRight = selected.type === "found";
+
+  matches.forEach(function(m){
+    var otherId = selected.type === "lost" ? m.found.id : m.lost.id;
+    var otherEl = document.querySelector('.card[data-id="' + otherId + '"]');
+    if (!otherEl) return;
+    var pin = otherEl.querySelector(".pin").getBoundingClientRect();
+    var endX = pin.left + pin.width / 2 - boardRect.left;
+    var endY = pin.top + pin.height / 2 - boardRect.top;
+
+    var midX = (startX + endX) / 2;
+    var sag = 26 + Math.random() * 10;
+    var pathD = "M " + startX + " " + startY + " Q " + midX + " " + (Math.max(startY, endY) + sag) + " " + endX + " " + endY;
+
+    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", pathD);
+    path.setAttribute("fill", "none");
+    var strokeColor = m.label === "strong" ? "var(--string-strong)" : m.label === "possible" ? "var(--string-possible)" : "var(--string-unlikely)";
+    path.setAttribute("stroke", strokeColor);
+    path.setAttribute("stroke-width", m.label === "strong" ? "2.6" : m.label === "possible" ? "1.8" : "1.2");
+    if (m.label === "possible") path.setAttribute("stroke-dasharray", "6 4");
+    if (m.label === "unlikely") path.setAttribute("stroke-dasharray", "1.5 4");
+    path.setAttribute("stroke-linecap", "round");
+    svg.appendChild(path);
+
+    var t = 0.5;
+    var mx = (1 - t) * (1 - t) * startX + 2 * (1 - t) * t * midX + t * t * endX;
+    var my = (1 - t) * (1 - t) * startY + 2 * (1 - t) * t * (Math.max(startY, endY) + sag) + t * t * endY;
+    var fo = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
+    fo.setAttribute("x", mx - 24);
+    fo.setAttribute("y", my - 11);
+    fo.setAttribute("width", "48");
+    fo.setAttribute("height", "22");
+    var div = document.createElement("div");
+    div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    div.className = "string-badge " + m.label;
+    div.textContent = Math.round(m.score * 100) + "%";
+    fo.appendChild(div);
+    svg.appendChild(fo);
+  });
+}
+
+function renderPanel(){
+  var body = document.getElementById("panel-body");
+  var sub = document.getElementById("panel-sub");
+  if (selectedId === null){
+    sub.textContent = "Click a pinned report to see its potential matches.";
+    body.innerHTML = '<p class="empty-hint">Nothing selected yet.</p>';
+    return;
+  }
+  var selected = findById(selectedId);
+  var opposite = byType(selected.type === "lost" ? "found" : "lost");
+  var matches = findMatches(selected, opposite);
+  sub.textContent = "Report #" + selected.id + " (" + selected.type + "): \u201c" + selected.description + "\u201d";
+  if (matches.length === 0){
+    body.innerHTML = '<p class="empty-hint">No plausible matches on the other side yet.</p>';
+    return;
+  }
+  body.innerHTML = "";
+  matches.forEach(function(m){
+    var other = selected.type === "lost" ? m.found : m.lost;
+    var row = document.createElement("div");
+    row.className = "match-row";
+    row.innerHTML =
+      '<div class="match-row-top">' +
+        '<span class="match-label ' + m.label + '">' + labelText(m.label) + '</span>' +
+        '<span class="match-score">' + Math.round(m.score * 100) + '%</span>' +
+      '</div>' +
+      '<div class="match-desc">#' + other.id + ' — ' + escapeHtml(other.description) + '</div>' +
+      '<div class="match-bar-track"><div class="match-bar-fill ' + m.label + '" style="width:' + Math.round(m.score * 100) + '%"></div></div>' +
+      '<div class="match-notes">' + m.notes.map(function(n){ return '<span class="note-chip">' + escapeHtml(n) + '</span>'; }).join("") + '</div>';
+    row.addEventListener("click", function(){
+      var el = document.querySelector('.card[data-id="' + other.id + '"]');
+      if (el){
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("flash");
+        setTimeout(function(){ el.classList.remove("flash"); }, 900);
+      }
+    });
+    body.appendChild(row);
+  });
+}
+
+document.querySelectorAll('.report-form textarea[data-field="description"]').forEach(function(ta){
+  ta.addEventListener("input", function(){
+    var form = ta.closest(".report-form");
+    if (ta.value.trim()) form.querySelector(".field-error").style.display = "none";
+  });
+});
+document.querySelectorAll(".new-report-btn").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    var type = btn.dataset.type;
+    document.querySelector('.report-form[data-type="' + type + '"]').classList.add("open");
+    btn.style.display = "none";
+  });
+});
+document.querySelectorAll(".form-cancel").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    var type = btn.dataset.type;
+    var form = document.querySelector('.report-form[data-type="' + type + '"]');
+    form.classList.remove("open");
+    form.querySelectorAll("textarea,input").forEach(function(f){ f.value = ""; });
+    form.querySelector(".field-error").style.display = "none";
+    document.querySelector('.new-report-btn[data-type="' + type + '"]').style.display = "block";
+  });
+});
+document.querySelectorAll(".form-submit").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    var type = btn.dataset.type;
+    var form = document.querySelector('.report-form[data-type="' + type + '"]');
+    var desc = form.querySelector('[data-field="description"]').value;
+    var errorEl = form.querySelector(".field-error");
+    if (!desc || !desc.trim()){
+      errorEl.style.display = "block";
+      return;
+    }
+    errorEl.style.display = "none";
+    var location = form.querySelector('[data-field="location"]').value;
+    var date = form.querySelector('[data-field="date"]').value;
+    var contact = form.querySelector('[data-field="contact"]').value;
+    addReport(type, desc, location, date, contact);
+    form.querySelectorAll("textarea,input").forEach(function(f){ f.value = ""; });
+    form.classList.remove("open");
+    document.querySelector('.new-report-btn[data-type="' + type + '"]').style.display = "block";
+    renderAll();
+    renderPanel();
+  });
+});
+
+var clearArmed = false, clearTimer = null;
+document.getElementById("clear-btn").addEventListener("click", function(){
+  var btn = document.getElementById("clear-btn");
+  if (!clearArmed){
+    clearArmed = true;
+    btn.textContent = "Click again to confirm";
+    clearTimer = setTimeout(function(){ clearArmed = false; btn.textContent = "Clear board"; }, 4000);
+    return;
+  }
+  clearTimeout(clearTimer);
+  clearArmed = false;
+  btn.textContent = "Clear board";
+  reports = [];
+  selectedId = null;
+  renderAll();
+  renderPanel();
+});
+
+document.getElementById("load-demo-btn").addEventListener("click", function(){
+  loadDemoData();
+  renderAll();
+  renderPanel();
+});
+
+function loadDemoData(){
+  addReport("lost", "I lost my black AirPods case yesterday near the cafeteria.", "cafeteria", "2026-08-20");
+  addReport("found", "Found a dark wireless earbud case beside the coffee shop.", "coffee shop", "2026-08-20");
+  addReport("lost", "Black backpack containing a laptop charger. Lost around the library on Monday afternoon.", "library", "2026-08-17");
+  addReport("found", "Dark-colored backpack found near the library entrance Monday evening.", "library entrance", "2026-08-17");
+  addReport("found", "Black backpack found at the football field two weeks later.", "football field", "2026-08-31");
+  addReport("found", "Blue umbrella left in a lecture hall.", "lecture hall", "2026-08-18");
+  addReport("lost", "Lost my brown wallet somewhere on campus.", "", "");
+  addReport("found", "Found a wallet, looks worn, brown leather.", "", "");
+}
+
+var knownLocationsDatalist = document.getElementById("known-locations");
+KNOWN_LOCATIONS.forEach(function(loc){
+  var opt = document.createElement("option");
+  opt.value = loc;
+  knownLocationsDatalist.appendChild(opt);
+});
+
+var resizeTimer = null;
+window.addEventListener("resize", function(){
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(recomputeStrings, 120);
+});
+
+loadDemoData();
+renderAll();
+renderPanel();
+</script>
+</body>
+</html>
